@@ -1,0 +1,1170 @@
+<!DOCTYPE html>
+<html lang="hi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>छठ पूजा बिलिंग टूल (Chhath Puja POS)</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Noto+Sans+Devanagari:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Noto Sans Devanagari', 'Inter', sans-serif;
+            -webkit-tap-highlight-color: transparent;
+            background-color: #f8fafc;
+        }
+        /* Hide number input spinners for clean mobile UI */
+        input[type="number"]::-webkit-inner-spin-button,
+        input[type="number"]::-webkit-outer-spin-button {
+            -webkit-appearance: none;
+            margin: 0;
+        }
+        input[type="number"] {
+            -moz-appearance: textfield;
+        }
+        .safe-bottom {
+            padding-bottom: env(safe-area-inset-bottom, 16px);
+        }
+    </style>
+</head>
+<body class="text-slate-800 select-none min-h-screen flex flex-col">
+
+    <!-- Top App Header -->
+    <header class="bg-gradient-to-r from-orange-600 to-amber-600 text-white shadow-md sticky top-0 z-30">
+        <div class="max-w-md mx-auto px-4 py-3 flex items-center justify-between">
+            <div class="flex items-center space-x-2">
+                <span class="text-2xl">🪔</span>
+                <div>
+                    <h1 class="font-extrabold text-lg leading-tight tracking-wide">छठ पूजा बिलिंग</h1>
+                    <p class="text-xs text-orange-100 font-medium">फास्ट कैलकुलेटर और बिल बुक</p>
+                </div>
+            </div>
+            <div id="editing-badge" class="hidden bg-white text-orange-700 text-xs font-bold px-2.5 py-1 rounded-full shadow flex items-center space-x-1 animate-pulse">
+                <span>✏️ बिल एडिट मोड</span>
+            </div>
+        </div>
+
+        <!-- 3-Tab Navigation Bar -->
+        <nav class="max-w-md mx-auto grid grid-cols-3 bg-orange-700/40 backdrop-blur-sm border-t border-orange-500/30">
+            <button onclick="switchTab('bill')" id="tab-btn-bill" class="py-2.5 text-center font-bold text-sm border-b-4 border-white text-white transition-all flex items-center justify-center space-x-1">
+                <span>🧾</span>
+                <span>नया बिल</span>
+            </button>
+            <button onclick="switchTab('items')" id="tab-btn-items" class="py-2.5 text-center font-medium text-sm border-b-4 border-transparent text-orange-100 hover:text-white transition-all flex items-center justify-center space-x-1">
+                <span>🏠</span>
+                <span>सामान / रेट</span>
+            </button>
+            <button onclick="switchTab('history')" id="tab-btn-history" class="py-2.5 text-center font-medium text-sm border-b-4 border-transparent text-orange-100 hover:text-white transition-all flex items-center justify-center space-x-1">
+                <span>📋</span>
+                <span>पुराने बिल (<span id="saved-bills-count">0</span>)</span>
+            </button>
+        </nav>
+    </header>
+
+    <!-- Main Content Container -->
+    <main class="flex-1 max-w-md w-full mx-auto pb-44 px-3 pt-3">
+
+        <!-- TAB 1: CREATE NEW BILL (नया बिल) -->
+        <section id="tab-bill" class="space-y-3">
+            <!-- Customer Name & Filter Controls -->
+            <div class="bg-white p-3 rounded-2xl shadow-sm border border-slate-200 space-y-2.5">
+                <div class="flex items-center space-x-2">
+                    <div class="relative flex-1">
+                        <input type="text" id="customer-name" placeholder="ग्राहक का नाम (जरूरी नहीं है)" 
+                            class="w-full pl-9 pr-3 py-2.5 bg-slate-50 border border-slate-300 rounded-xl text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-orange-500 focus:bg-white transition-all">
+                        <span class="absolute left-3 top-2.5 text-slate-400">👤</span>
+                    </div>
+                    <button onclick="resetCurrentBill()" class="px-3 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded-xl text-xs font-bold transition-colors shrink-0">
+                        साफ़ करें
+                    </button>
+                </div>
+
+                <!-- Quick Filter & Search inside Bill -->
+                <div class="flex items-center justify-between gap-2 pt-1 border-t border-slate-100">
+                    <div class="relative flex-1">
+                        <input type="text" id="bill-item-search" oninput="renderBillingList()" placeholder="सामान खोजें (जैसे: नारियल, केला)..." 
+                            class="w-full pl-8 pr-7 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-xs font-medium focus:outline-none focus:border-orange-500">
+                        <span class="absolute left-2.5 top-1.5 text-slate-400 text-xs">🔍</span>
+                        <button onclick="clearBillItemSearch()" id="clear-item-search-btn" class="hidden absolute right-2 top-1.5 text-slate-400 text-xs font-bold">✕</button>
+                    </div>
+                    <button onclick="toggleSelectedOnly()" id="btn-selected-only" class="px-3 py-1.5 rounded-lg text-xs font-bold border border-slate-300 bg-white text-slate-700 transition-all shrink-0 flex items-center space-x-1">
+                        <span>👁️</span>
+                        <span id="selected-only-text">सिर्फ चुने हुए (0)</span>
+                    </button>
+                </div>
+            </div>
+
+            <!-- Billing Items List -->
+            <div id="billing-items-container" class="space-y-2.5"></div>
+        </section>
+
+        <!-- TAB 2: HOME / ITEMS & RATES (सामान और रेट) -->
+        <section id="tab-items" class="hidden space-y-3">
+            <div class="bg-orange-50 border border-orange-200 rounded-2xl p-3 flex items-center justify-between">
+                <div>
+                    <h2 class="text-sm font-bold text-orange-900">सामान और आज का रेट</h2>
+                    <p class="text-xs text-orange-700">यहाँ रेट बदलें, बिल में अपने-आप अपडेट हो जाएगा</p>
+                </div>
+                <button onclick="openAddItemModal()" class="bg-orange-600 hover:bg-orange-700 active:scale-95 text-white font-bold text-sm px-3.5 py-2.5 rounded-xl shadow-md flex items-center space-x-1.5 transition-all shrink-0">
+                    <span class="text-lg leading-none">+</span>
+                    <span>नया सामान</span>
+                </button>
+            </div>
+
+            <!-- Items Master List -->
+            <div id="master-items-container" class="space-y-2"></div>
+
+            <!-- Reset Default Items Option -->
+            <div class="pt-4 text-center">
+                <button onclick="openResetMasterModal()" class="text-xs text-slate-400 hover:text-slate-600 underline font-medium">
+                    डिफ़ॉल्ट छठ पूजा सामान लिस्ट रीसेट करें
+                </button>
+            </div>
+        </section>
+
+        <!-- TAB 3: SAVED BILLS HISTORY (पुराने बिल) -->
+        <section id="tab-history" class="hidden space-y-3">
+            <!-- Summary Banner -->
+            <div class="bg-gradient-to-r from-slate-800 to-slate-900 text-white p-3.5 rounded-2xl shadow-sm flex items-center justify-between">
+                <div>
+                    <p class="text-xs text-slate-300">कुल सेव किए गए बिल</p>
+                    <p id="history-total-bills" class="text-xl font-extrabold">0 बिल</p>
+                </div>
+                <div class="text-right">
+                    <p class="text-xs text-slate-300">आज की कुल बिक्री</p>
+                    <p id="history-total-sales" class="text-xl font-extrabold text-amber-400">₹0</p>
+                </div>
+            </div>
+
+            <!-- Search Bar for Saved Bills -->
+            <div class="relative">
+                <input type="text" id="history-search" oninput="renderHistoryList()" placeholder="ग्राहक का नाम, बिल नंबर (#1) या रकम खोजें..." 
+                    class="w-full pl-10 pr-9 py-3 bg-white border border-slate-300 rounded-2xl text-sm font-medium shadow-sm focus:outline-none focus:ring-2 focus:ring-orange-500">
+                <span class="absolute left-3.5 top-3.5 text-slate-400">🔍</span>
+                <button onclick="clearHistorySearch()" id="clear-history-search-btn" class="hidden absolute right-3 top-3 text-slate-400 hover:text-slate-600 font-bold text-sm">✕</button>
+            </div>
+
+            <!-- Saved Bills List -->
+            <div id="history-bills-container" class="space-y-2.5"></div>
+        </section>
+
+    </main>
+
+    <!-- Sticky Bottom Bar (Only visible on Tab 1: New Bill) -->
+    <div id="sticky-bill-footer" class="fixed bottom-0 left-0 right-0 bg-white border-t border-slate-200 shadow-[0_-8px_20px_rgba(0,0,0,0.08)] z-20 safe-bottom">
+        <div class="max-w-md mx-auto px-4 py-2.5 flex items-center justify-between gap-3">
+            <div onclick="openBillPreviewModal()" class="cursor-pointer flex-1">
+                <div class="flex items-center space-x-1.5">
+                    <span class="text-xs font-bold text-slate-500">कुल सामान: <span id="footer-item-count" class="text-slate-800">0</span></span>
+                    <span class="text-xs text-orange-600 font-semibold underline">(पर्ची देखें)</span>
+                </div>
+                <div class="text-2xl font-extrabold text-slate-900 tracking-tight">
+                    ₹<span id="footer-grand-total">0</span>
+                </div>
+            </div>
+            <button onclick="saveCurrentBill()" class="bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white font-extrabold text-base px-6 py-3.5 rounded-2xl shadow-lg shadow-emerald-600/20 flex items-center space-x-2 transition-all">
+                <span>✅</span>
+                <span id="save-bill-btn-text">बिल सेव करें</span>
+            </button>
+        </div>
+    </div>
+
+    <!-- Floating '+' Button on Home/Items Tab -->
+    <button id="fab-add-item" onclick="openAddItemModal()" class="hidden fixed bottom-6 right-6 bg-orange-600 hover:bg-orange-700 active:scale-95 text-white w-14 h-14 rounded-full shadow-xl flex items-center justify-center text-3xl font-bold z-20">
+        +
+    </button>
+
+    <!-- MODAL 1: ADD / EDIT MASTER ITEM -->
+    <div id="modal-add-item" class="hidden fixed inset-0 bg-slate-900/60 backdrop-blur-xs z-50 flex items-center justify-center p-4">
+        <div class="bg-white rounded-3xl max-w-sm w-full p-5 shadow-2xl space-y-4 animate-in fade-in zoom-in-95 duration-150">
+            <div class="flex items-center justify-between border-b border-slate-100 pb-3">
+                <h3 class="font-extrabold text-lg text-slate-800">नया सामान जोड़ें</h3>
+                <button onclick="closeAddItemModal()" class="text-slate-400 hover:text-slate-600 text-xl font-bold">✕</button>
+            </div>
+            <div class="space-y-3">
+                <div>
+                    <label class="block text-xs font-bold text-slate-600 mb-1">सामान का नाम (Item Name)</label>
+                    <input type="text" id="new-item-name" placeholder="जैसे: डाभ नींबू, सुथनी, पान..." 
+                        class="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-300 rounded-xl text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-orange-500">
+                </div>
+                <div class="grid grid-cols-2 gap-3">
+                    <div>
+                        <label class="block text-xs font-bold text-slate-600 mb-1">हिसाब का तरीका (Unit)</label>
+                        <select id="new-item-unit" class="w-full px-3 py-2.5 bg-slate-50 border border-slate-300 rounded-xl text-sm font-bold text-slate-800 focus:outline-none focus:ring-2 focus:ring-orange-500">
+                            <option value="pc">प्रति पीस (Piece)</option>
+                            <option value="kg">प्रति किलो (Kg)</option>
+                            <option value="dozen">प्रति दर्जन (12 पीस)</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block text-xs font-bold text-slate-600 mb-1">रेट (₹ Price)</label>
+                        <input type="number" id="new-item-rate" inputmode="decimal" placeholder="जैसे: 40" 
+                            class="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-300 rounded-xl text-sm font-bold focus:outline-none focus:ring-2 focus:ring-orange-500">
+                    </div>
+                </div>
+            </div>
+            <div class="flex space-x-2 pt-2">
+                <button onclick="closeAddItemModal()" class="flex-1 py-2.5 bg-slate-100 text-slate-700 font-bold rounded-xl text-sm">रद्द करें</button>
+                <button onclick="saveNewMasterItem()" class="flex-1 py-2.5 bg-orange-600 text-white font-bold rounded-xl text-sm shadow-md">सेव करें</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- MODAL 2: VIEW BILL DETAILS (पर्ची देखें) -->
+    <div id="modal-bill-details" class="hidden fixed inset-0 bg-slate-900/60 backdrop-blur-xs z-50 flex items-end sm:items-center justify-center p-0 sm:p-4">
+        <div class="bg-white rounded-t-3xl sm:rounded-3xl max-w-md w-full max-h-[88vh] flex flex-col shadow-2xl overflow-hidden">
+            <!-- Modal Header -->
+            <div class="bg-orange-600 text-white px-5 py-4 flex items-center justify-between">
+                <div>
+                    <span id="modal-bill-token" class="text-xs uppercase font-bold bg-orange-800/50 px-2 py-0.5 rounded">बिल #1</span>
+                    <h3 id="modal-bill-customer" class="font-extrabold text-lg mt-0.5">ग्राहक</h3>
+                    <p id="modal-bill-time" class="text-xs text-orange-100"></p>
+                </div>
+                <button onclick="closeBillDetailsModal()" class="w-8 h-8 rounded-full bg-orange-700/50 flex items-center justify-center text-white font-bold">✕</button>
+            </div>
+
+            <!-- Modal Body (Itemized List) -->
+            <div class="p-4 overflow-y-auto flex-1 space-y-2" id="modal-bill-items-list"></div>
+
+            <!-- Modal Footer -->
+            <div class="p-4 bg-slate-50 border-t border-slate-200 space-y-3 safe-bottom">
+                <div class="flex items-center justify-between text-lg font-extrabold text-slate-900">
+                    <span>कुल रकम (Grand Total):</span>
+                    <span class="text-2xl text-emerald-700">₹<span id="modal-bill-total">0</span></span>
+                </div>
+                <div id="modal-bill-actions" class="grid grid-cols-2 gap-2"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- MODAL 3: CONFIRMATION DIALOG (No native alert/confirm) -->
+    <div id="modal-confirm" class="hidden fixed inset-0 bg-slate-900/60 backdrop-blur-xs z-50 flex items-center justify-center p-4">
+        <div class="bg-white rounded-3xl max-w-xs w-full p-5 shadow-2xl text-center space-y-4">
+            <div class="w-12 h-12 rounded-full bg-red-100 text-red-600 flex items-center justify-center mx-auto text-2xl">⚠️</div>
+            <h3 id="confirm-title" class="font-extrabold text-base text-slate-800">क्या आप पक्का मिटाना चाहते हैं?</h3>
+            <p id="confirm-desc" class="text-xs text-slate-500">यह एक्शन वापस नहीं किया जा सकता।</p>
+            <div class="flex space-x-2 pt-1">
+                <button onclick="closeConfirmModal()" class="flex-1 py-2.5 bg-slate-100 text-slate-700 font-bold rounded-xl text-sm">नहीं</button>
+                <button id="confirm-yes-btn" class="flex-1 py-2.5 bg-red-600 text-white font-bold rounded-xl text-sm shadow-md">हाँ, मिटाएं</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Toast Notification -->
+    <div id="toast" class="fixed top-16 left-1/2 -translate-x-1/2 bg-slate-900 text-white px-4 py-2.5 rounded-full shadow-xl text-xs font-bold z-50 transition-all opacity-0 pointer-events-none">
+        बिल सेव हो गया!
+    </div>
+
+    <script>
+        // Storage Keys for Persistence across refreshes
+        const STORAGE_KEYS = {
+            ITEMS: 'chhath_pos_master_items_v1',
+            BILLS: 'chhath_pos_saved_bills_v1',
+            DRAFT: 'chhath_pos_active_draft_v1',
+            TOKEN_COUNTER: 'chhath_pos_token_counter_v1'
+        };
+
+        // Pre-loaded Chhath Puja Default Items tailored to user's village shop rules:
+        // 1. Haldi, Mooli, Aadi, Dhaniya etc. sold strictly by PIECE
+        // 2. Banana sold by DOZEN (with support for exact piece count like 13 bananas)
+        // 3. Fruits like Apple, Orange, Singhara sold by WEIGHT (Kg)
+        const DEFAULT_ITEMS = [
+            { id: 'item_1', name: 'नारियल (Coconut)', unit: 'pc', rate: 40 },
+            { id: 'item_2', name: 'केला (Banana)', unit: 'dozen', rate: 60 },
+            { id: 'item_3', name: 'सेब (Apple)', unit: 'kg', rate: 120 },
+            { id: 'item_4', name: 'संतरा (Orange)', unit: 'kg', rate: 80 },
+            { id: 'item_5', name: 'सिंघाड़ा (Water Chestnut)', unit: 'kg', rate: 60 },
+            { id: 'item_6', name: 'अनार (Pomegranate)', unit: 'kg', rate: 160 },
+            { id: 'item_7', name: 'हल्दी का पौधा (Haldi)', unit: 'pc', rate: 5 },
+            { id: 'item_8', name: 'मूली (Mooli)', unit: 'pc', rate: 5 },
+            { id: 'item_9', name: 'आदि / अदरक (Ginger)', unit: 'pc', rate: 10 },
+            { id: 'item_10', name: 'धनिया (Coriander)', unit: 'pc', rate: 5 },
+            { id: 'item_11', name: 'सुथनी (Suthni)', unit: 'pc', rate: 10 },
+            { id: 'item_12', name: 'डाभ नींबू (Dabh Lemon)', unit: 'pc', rate: 25 },
+            { id: 'item_13', name: 'गन्ना / ईख (Sugarcane)', unit: 'pc', rate: 20 },
+            { id: 'item_14', name: 'अनानास (Pineapple)', unit: 'pc', rate: 60 },
+            { id: 'item_15', name: 'शकरकंद / अलुआ', unit: 'kg', rate: 50 },
+            { id: 'item_16', name: 'सूप / दौरा (Bamboo Basket)', unit: 'pc', rate: 70 },
+            { id: 'item_17', name: 'पान पत्ता और सुपारी', unit: 'pc', rate: 10 },
+            { id: 'item_18', name: 'अरकपात और बद्धी', unit: 'pc', rate: 10 }
+        ];
+
+        // Application State
+        let masterItems = [];
+        let savedBills = [];
+        let activeTab = 'bill';
+        let showSelectedOnly = false;
+        let editingBillId = null;
+
+        // Current Active Bill State
+        // quantities stores item_id -> { qty: number, dozenMode: 'dozen' | 'pieces' }
+        let currentBill = {
+            customerName: '',
+            entries: {}
+        };
+
+        // Load everything on startup
+        window.addEventListener('DOMContentLoaded', () => {
+            loadFromStorage();
+            renderAll();
+
+            // Bind customer name input persistence
+            const nameInput = document.getElementById('customer-name');
+            nameInput.addEventListener('input', (e) => {
+                currentBill.customerName = e.target.value;
+                saveDraftToStorage();
+            });
+        });
+
+        function loadFromStorage() {
+            try {
+                const storedItems = localStorage.getItem(STORAGE_KEYS.ITEMS);
+                if (storedItems) {
+                    masterItems = JSON.parse(storedItems);
+                } else {
+                    masterItems = JSON.parse(JSON.stringify(DEFAULT_ITEMS));
+                    saveItemsToStorage();
+                }
+
+                const storedBills = localStorage.getItem(STORAGE_KEYS.BILLS);
+                if (storedBills) {
+                    savedBills = JSON.parse(storedBills);
+                }
+
+                const storedDraft = localStorage.getItem(STORAGE_KEYS.DRAFT);
+                if (storedDraft) {
+                    const parsedDraft = JSON.parse(storedDraft);
+                    currentBill = parsedDraft.currentBill || { customerName: '', entries: {} };
+                    editingBillId = parsedDraft.editingBillId || null;
+                    document.getElementById('customer-name').value = currentBill.customerName || '';
+                    updateEditingBadge();
+                }
+            } catch (err) {
+                console.error('Error loading storage:', err);
+                masterItems = JSON.parse(JSON.stringify(DEFAULT_ITEMS));
+            }
+        }
+
+        function saveItemsToStorage() {
+            try {
+                localStorage.setItem(STORAGE_KEYS.ITEMS, JSON.stringify(masterItems));
+            } catch (e) {
+                console.error('Error saving items:', e);
+            }
+        }
+
+        function saveBillsToStorage() {
+            try {
+                localStorage.setItem(STORAGE_KEYS.BILLS, JSON.stringify(savedBills));
+                updateHistoryBadge();
+            } catch (e) {
+                console.error('Error saving bills:', e);
+            }
+        }
+
+        function saveDraftToStorage() {
+            try {
+                localStorage.setItem(STORAGE_KEYS.DRAFT, JSON.stringify({
+                    currentBill,
+                    editingBillId
+                }));
+            } catch (e) {
+                console.error('Error saving draft:', e);
+            }
+        }
+
+        function getNextTokenNumber() {
+            let current = parseInt(localStorage.getItem(STORAGE_KEYS.TOKEN_COUNTER) || '0', 10);
+            current += 1;
+            localStorage.setItem(STORAGE_KEYS.TOKEN_COUNTER, String(current));
+            return current;
+        }
+
+        function getEntry(itemId, unit) {
+            if (!currentBill.entries[itemId]) {
+                currentBill.entries[itemId] = {
+                    qty: 0,
+                    // For dozen items (like Banana), shopkeeper can enter either Dozens OR exact Banana Pieces (e.g. 13 bananas)
+                    // For kg items, qty is stored and entered directly in GRAMS (e.g. 350 for 350g)
+                    subUnit: unit === 'dozen' ? 'pieces' : (unit === 'kg' ? 'gm' : unit)
+                };
+            }
+            return currentBill.entries[itemId];
+        }
+
+        function calculateItemLineTotal(item, entry) {
+            if (!entry || !entry.qty || entry.qty <= 0) return 0;
+            const rate = parseFloat(item.rate) || 0;
+            const qty = parseFloat(entry.qty) || 0;
+
+            if (item.unit === 'pc') {
+                return qty * rate;
+            } else if (item.unit === 'kg') {
+                // qty is entered in grams (e.g. 350 for 350g), while rate is per 1 Kg (1000g)
+                return (qty / 1000) * rate;
+            } else if (item.unit === 'dozen') {
+                // If subUnit is 'pieces' (e.g., customer asks for 13 bananas), price = (13 / 12) * dozen_rate
+                if (entry.subUnit === 'pieces') {
+                    return (qty / 12) * rate;
+                } else {
+                    // subUnit is 'dozen' (e.g., 1.5 dozen)
+                    return qty * rate;
+                }
+            }
+            return 0;
+        }
+
+        function formatQuantityLabel(item, entry) {
+            if (!entry || !entry.qty) return '0';
+            const qty = parseFloat(entry.qty);
+
+            if (item.unit === 'pc') {
+                return `${qty} पीस`;
+            } else if (item.unit === 'kg') {
+                // qty is in grams
+                if (qty < 1000) {
+                    return `${Math.round(qty)} ग्राम`;
+                }
+                const wholeKg = Math.floor(qty / 1000);
+                const remGrams = Math.round(qty % 1000);
+                if (remGrams === 0) return `${wholeKg} किलो (${qty}g)`;
+                return `${wholeKg} किलो ${remGrams} ग्राम (${qty}g)`;
+            } else if (item.unit === 'dozen') {
+                if (entry.subUnit === 'pieces') {
+                    const doz = Math.floor(qty / 12);
+                    const rem = qty % 12;
+                    if (doz > 0 && rem > 0) {
+                        return `${qty} केला (${doz} दर्जन + ${rem} पीस)`;
+                    } else if (doz > 0 && rem === 0) {
+                        return `${qty} केला (${doz} दर्जन)`;
+                    }
+                    return `${qty} केला (पीस)`;
+                } else {
+                    return `${qty} दर्जन (${Math.round(qty * 12)} पीस)`;
+                }
+            }
+            return `${qty}`;
+        }
+
+        function formatMoney(amount) {
+            // Round to 2 decimal places if fractional (like 13 bananas), otherwise clean integer
+            const rounded = Math.round((amount + Number.EPSILON) * 100) / 100;
+            return Number.isInteger(rounded) ? String(rounded) : rounded.toFixed(2);
+        }
+
+        function renderBillingList() {
+            const container = document.getElementById('billing-items-container');
+            const searchQuery = (document.getElementById('bill-item-search').value || '').trim().toLowerCase();
+            const clearBtn = document.getElementById('clear-item-search-btn');
+            clearBtn.classList.toggle('hidden', searchQuery.length === 0);
+
+            let html = '';
+            let visibleCount = 0;
+
+            masterItems.forEach((item) => {
+                const entry = getEntry(item.id, item.unit);
+                const qty = parseFloat(entry.qty) || 0;
+                const isSelected = qty > 0;
+
+                if (showSelectedOnly && !isSelected) return;
+                if (searchQuery && !item.name.toLowerCase().includes(searchQuery)) return;
+
+                visibleCount++;
+                const lineTotal = calculateItemLineTotal(item, entry);
+                const unitBadge = item.unit === 'pc' ? 'पीस' : (item.unit === 'kg' ? 'किलो' : 'दर्जन (12)');
+
+                // Card border highlights when item has > 0 quantity
+                const cardStyle = isSelected
+                    ? 'bg-orange-50/70 border-2 border-orange-500 shadow-sm'
+                    : 'bg-white border border-slate-200 shadow-xs';
+
+                html += `
+                <div class="rounded-2xl p-3 transition-all ${cardStyle}">
+                    <div class="flex items-start justify-between gap-2">
+                        <div class="flex-1">
+                            <div class="flex items-center flex-wrap gap-1.5">
+                                <h3 class="font-extrabold text-base text-slate-900">${escapeHtml(item.name)}</h3>
+                                <span class="text-[11px] font-bold px-2 py-0.5 rounded-md bg-slate-100 text-slate-600">
+                                    ₹${item.rate} / ${unitBadge}
+                                </span>
+                            </div>
+                            ${isSelected ? `
+                                <p class="text-xs font-bold text-orange-700 mt-0.5">
+                                    मात्रा: ${formatQuantityLabel(item, entry)}
+                                </p>
+                            ` : ''}
+                        </div>
+
+                        <!-- Line Item Calculated Price -->
+                        <div class="text-right shrink-0">
+                            <span class="text-xs text-slate-400 block">रकम</span>
+                            <span id="line-total-${item.id}" class="text-lg font-extrabold ${isSelected ? 'text-emerald-700' : 'text-slate-400'}">
+                                ₹${formatMoney(lineTotal)}
+                            </span>
+                        </div>
+                    </div>
+
+                    <!-- Controls based on Unit Type -->
+                    <div class="mt-2.5 pt-2 border-t border-slate-100">
+                        ${renderUnitControls(item, entry)}
+                    </div>
+                </div>`;
+            });
+
+            if (visibleCount === 0) {
+                html = `
+                <div class="bg-white rounded-2xl p-8 text-center border border-dashed border-slate-300 space-y-2">
+                    <div class="text-3xl">🧺</div>
+                    <p class="text-sm font-bold text-slate-700">कोई सामान नहीं मिला</p>
+                    <p class="text-xs text-slate-500">${showSelectedOnly ? 'आपने अभी तक कोई सामान नहीं चुना है।' : 'नया सामान जोड़ने के लिए "सामान / रेट" टैब में जाएं।'}</p>
+                    ${showSelectedOnly ? `<button onclick="toggleSelectedOnly()" class="mt-2 px-4 py-2 bg-orange-100 text-orange-700 rounded-xl text-xs font-bold">सभी सामान दिखाएं</button>` : ''}
+                </div>`;
+            }
+
+            container.innerHTML = html;
+            updateFooterTotals();
+        }
+
+        function renderUnitControls(item, entry) {
+            const qty = parseFloat(entry.qty) || 0;
+
+            // 1. PIECE ITEMS (Haldi, Mooli, Coconut, Ginger, etc.)
+            if (item.unit === 'pc') {
+                return `
+                <div class="flex items-center justify-between gap-2">
+                    <div class="flex items-center gap-1 flex-wrap">
+                        <button onclick="adjustPiece('${item.id}', 1)" class="px-2.5 py-1.5 bg-slate-100 hover:bg-orange-100 active:bg-orange-200 text-slate-800 rounded-lg text-xs font-bold">+1</button>
+                        <button onclick="adjustPiece('${item.id}', 2)" class="px-2.5 py-1.5 bg-slate-100 hover:bg-orange-100 active:bg-orange-200 text-slate-800 rounded-lg text-xs font-bold">+2</button>
+                        <button onclick="adjustPiece('${item.id}', 5)" class="px-2.5 py-1.5 bg-slate-100 hover:bg-orange-100 active:bg-orange-200 text-slate-800 rounded-lg text-xs font-bold">+5</button>
+                        ${qty > 0 ? `<button onclick="setItemQty('${item.id}', 0)" class="px-2 py-1.5 bg-red-50 text-red-600 rounded-lg text-xs font-bold">0 करें</button>` : ''}
+                    </div>
+                    <div class="flex items-center space-x-1 shrink-0">
+                        <button onclick="adjustPiece('${item.id}', -1)" class="w-8 h-9 rounded-lg bg-slate-200 text-slate-800 font-extrabold text-lg flex items-center justify-center active:scale-95">−</button>
+                        <input type="number" inputmode="decimal" value="${qty > 0 ? qty : ''}" placeholder="0 पीस"
+                            oninput="onDirectInput('${item.id}', this.value)"
+                            class="w-20 h-9 text-center bg-slate-50 border border-slate-300 rounded-lg font-extrabold text-sm focus:outline-none focus:ring-2 focus:ring-orange-500">
+                        <button onclick="adjustPiece('${item.id}', 1)" class="w-8 h-9 rounded-lg bg-orange-600 text-white font-extrabold text-lg flex items-center justify-center active:scale-95">+</button>
+                    </div>
+                </div>`;
+            }
+
+            // 2. WEIGHT ITEMS (Apple, Orange, Singhara - Rate is per Kg, Input is directly in Grams!)
+            if (item.unit === 'kg') {
+                return `
+                <div class="space-y-2">
+                    <div class="flex items-center justify-between gap-2">
+                        <div class="flex items-center gap-1 flex-wrap">
+                            <button onclick="setItemQty('${item.id}', 250)" class="px-2 py-1.5 ${qty === 250 ? 'bg-orange-600 text-white' : 'bg-slate-100 text-slate-800'} rounded-lg text-xs font-bold">250g</button>
+                            <button onclick="setItemQty('${item.id}', 500)" class="px-2 py-1.5 ${qty === 500 ? 'bg-orange-600 text-white' : 'bg-slate-100 text-slate-800'} rounded-lg text-xs font-bold">500g</button>
+                            <button onclick="setItemQty('${item.id}', 1000)" class="px-2 py-1.5 ${qty === 1000 ? 'bg-orange-600 text-white' : 'bg-slate-100 text-slate-800'} rounded-lg text-xs font-bold">1 Kg (1000g)</button>
+                            <button onclick="setItemQty('${item.id}', 1500)" class="px-2 py-1.5 ${qty === 1500 ? 'bg-orange-600 text-white' : 'bg-slate-100 text-slate-800'} rounded-lg text-xs font-bold">1.5 Kg</button>
+                            <button onclick="setItemQty('${item.id}', 2000)" class="px-2 py-1.5 ${qty === 2000 ? 'bg-orange-600 text-white' : 'bg-slate-100 text-slate-800'} rounded-lg text-xs font-bold">2 Kg</button>
+                            ${qty > 0 ? `<button onclick="setItemQty('${item.id}', 0)" class="px-2 py-1.5 bg-red-50 text-red-600 rounded-lg text-xs font-bold">✕</button>` : ''}
+                        </div>
+                        <div class="flex items-center space-x-1 shrink-0">
+                            <input type="number" inputmode="numeric" step="10" value="${qty > 0 ? qty : ''}" placeholder="ग्राम (जैसे 350)"
+                                oninput="onDirectInput('${item.id}', this.value)"
+                                class="w-28 h-9 px-2 text-center bg-slate-50 border border-slate-300 rounded-lg font-extrabold text-sm focus:outline-none focus:ring-2 focus:ring-orange-500">
+                            <span class="text-xs font-bold text-slate-600">ग्राम (g)</span>
+                        </div>
+                    </div>
+                </div>`;
+            }
+
+            // 3. DOZEN ITEMS (Banana - supports both Dozen and exact Piece count like 13 bananas!)
+            if (item.unit === 'dozen') {
+                const isPieceMode = entry.subUnit === 'pieces';
+                const perPieceRate = formatMoney((parseFloat(item.rate) || 0) / 12);
+
+                return `
+                <div class="space-y-2">
+                    <!-- Mode Switcher: Count by Pieces (e.g. 13 bananas) OR by Dozens -->
+                    <div class="flex items-center justify-between bg-amber-50/80 border border-amber-200/80 rounded-xl p-1.5">
+                        <span class="text-[11px] font-bold text-amber-900 pl-1">
+                            1 केला = ₹${perPieceRate}
+                        </span>
+                        <div class="flex bg-white rounded-lg p-0.5 border border-amber-200">
+                            <button onclick="setDozenMode('${item.id}', 'pieces')" 
+                                class="px-2.5 py-1 rounded-md text-xs font-bold transition-all ${isPieceMode ? 'bg-orange-600 text-white shadow-xs' : 'text-slate-600'}">
+                                पीस में गिनें (जैसे 13 केला)
+                            </button>
+                            <button onclick="setDozenMode('${item.id}', 'dozen')" 
+                                class="px-2.5 py-1 rounded-md text-xs font-bold transition-all ${!isPieceMode ? 'bg-orange-600 text-white shadow-xs' : 'text-slate-600'}">
+                                दर्जन में
+                            </button>
+                        </div>
+                    </div>
+
+                    <div class="flex items-center justify-between gap-2">
+                        <div class="flex items-center gap-1 flex-wrap">
+                            ${isPieceMode ? `
+                                <button onclick="setItemQty('${item.id}', 6)" class="px-2 py-1.5 ${qty === 6 ? 'bg-orange-600 text-white' : 'bg-slate-100 text-slate-800'} rounded-lg text-xs font-bold">6 केला (½ दर्जन)</button>
+                                <button onclick="setItemQty('${item.id}', 12)" class="px-2 py-1.5 ${qty === 12 ? 'bg-orange-600 text-white' : 'bg-slate-100 text-slate-800'} rounded-lg text-xs font-bold">12 केला (1 दर्जन)</button>
+                                <button onclick="setItemQty('${item.id}', 13)" class="px-2 py-1.5 ${qty === 13 ? 'bg-orange-600 text-white' : 'bg-slate-100 text-slate-800'} rounded-lg text-xs font-bold">13 केला</button>
+                                <button onclick="setItemQty('${item.id}', 24)" class="px-2 py-1.5 ${qty === 24 ? 'bg-orange-600 text-white' : 'bg-slate-100 text-slate-800'} rounded-lg text-xs font-bold">24 केला</button>
+                            ` : `
+                                <button onclick="setItemQty('${item.id}', 0.5)" class="px-2 py-1.5 ${qty === 0.5 ? 'bg-orange-600 text-white' : 'bg-slate-100 text-slate-800'} rounded-lg text-xs font-bold">½ दर्जन</button>
+                                <button onclick="setItemQty('${item.id}', 1)" class="px-2 py-1.5 ${qty === 1 ? 'bg-orange-600 text-white' : 'bg-slate-100 text-slate-800'} rounded-lg text-xs font-bold">1 दर्जन</button>
+                                <button onclick="setItemQty('${item.id}', 2)" class="px-2 py-1.5 ${qty === 2 ? 'bg-orange-600 text-white' : 'bg-slate-100 text-slate-800'} rounded-lg text-xs font-bold">2 दर्जन</button>
+                            `}
+                            ${qty > 0 ? `<button onclick="setItemQty('${item.id}', 0)" class="px-2 py-1.5 bg-red-50 text-red-600 rounded-lg text-xs font-bold">✕</button>` : ''}
+                        </div>
+
+                        <div class="flex items-center space-x-1 shrink-0">
+                            <input type="number" inputmode="decimal" value="${qty > 0 ? qty : ''}" placeholder="${isPieceMode ? 'केला संख्या' : 'दर्जन'}"
+                                oninput="onDirectInput('${item.id}', this.value)"
+                                class="w-24 h-9 px-2 text-center bg-slate-50 border border-slate-300 rounded-lg font-extrabold text-sm focus:outline-none focus:ring-2 focus:ring-orange-500">
+                            <span class="text-xs font-bold text-slate-600">${isPieceMode ? 'केला' : 'दर्जन'}</span>
+                        </div>
+                    </div>
+                </div>`;
+            }
+        }
+
+        function adjustPiece(itemId, delta) {
+            const item = masterItems.find(i => i.id === itemId);
+            if (!item) return;
+            const entry = getEntry(itemId, item.unit);
+            const next = Math.max(0, (parseFloat(entry.qty) || 0) + delta);
+            entry.qty = next;
+            saveDraftToStorage();
+            renderBillingList();
+        }
+
+        function setItemQty(itemId, val) {
+            const item = masterItems.find(i => i.id === itemId);
+            if (!item) return;
+            const entry = getEntry(itemId, item.unit);
+            entry.qty = Math.max(0, parseFloat(val) || 0);
+            saveDraftToStorage();
+            renderBillingList();
+        }
+
+        function setDozenMode(itemId, mode) {
+            const item = masterItems.find(i => i.id === itemId);
+            if (!item) return;
+            const entry = getEntry(itemId, item.unit);
+            if (entry.subUnit !== mode) {
+                // Convert existing quantity smoothly if non-zero
+                if (entry.qty > 0) {
+                    if (mode === 'pieces') {
+                        entry.qty = Math.round(entry.qty * 12);
+                    } else {
+                        entry.qty = Math.round((entry.qty / 12) * 100) / 100;
+                    }
+                }
+                entry.subUnit = mode;
+                saveDraftToStorage();
+                renderBillingList();
+            }
+        }
+
+        function onDirectInput(itemId, rawVal) {
+            const item = masterItems.find(i => i.id === itemId);
+            if (!item) return;
+            const entry = getEntry(itemId, item.unit);
+            const parsed = parseFloat(rawVal);
+            entry.qty = (!isNaN(parsed) && parsed >= 0) ? parsed : 0;
+
+            // Update line total live without re-rendering full DOM (so keyboard focus stays intact!)
+            const lineTotal = calculateItemLineTotal(item, entry);
+            const lineEl = document.getElementById(`line-total-${itemId}`);
+            if (lineEl) {
+                lineEl.textContent = `₹${formatMoney(lineEl ? lineTotal : 0)}`;
+                lineEl.className = `text-lg font-extrabold ${entry.qty > 0 ? 'text-emerald-700' : 'text-slate-400'}`;
+            }
+
+            saveDraftToStorage();
+            updateFooterTotals();
+        }
+
+        function computeBillSummary() {
+            let totalAmount = 0;
+            let selectedCount = 0;
+            const purchasedItems = [];
+
+            masterItems.forEach(item => {
+                const entry = currentBill.entries[item.id];
+                if (entry && entry.qty > 0) {
+                    const lineTotal = calculateItemLineTotal(item, entry);
+                    totalAmount += lineTotal;
+                    selectedCount++;
+                    purchasedItems.push({
+                        id: item.id,
+                        name: item.name,
+                        unit: item.unit,
+                        rate: item.rate,
+                        qty: entry.qty,
+                        subUnit: entry.subUnit,
+                        qtyLabel: formatQuantityLabel(item, entry),
+                        lineTotal: Math.round((lineTotal + Number.EPSILON) * 100) / 100
+                    });
+                }
+            });
+
+            return {
+                totalAmount: Math.round((totalAmount + Number.EPSILON) * 100) / 100,
+                selectedCount,
+                purchasedItems
+            };
+        }
+
+        function updateFooterTotals() {
+            const summary = computeBillSummary();
+            document.getElementById('footer-item-count').textContent = summary.selectedCount;
+            document.getElementById('footer-grand-total').textContent = formatMoney(summary.totalAmount);
+            document.getElementById('selected-only-text').textContent = `सिर्फ चुने हुए (${summary.selectedCount})`;
+
+            const filterBtn = document.getElementById('btn-selected-only');
+            if (showSelectedOnly) {
+                filterBtn.className = 'px-3 py-1.5 rounded-lg text-xs font-bold border border-orange-600 bg-orange-600 text-white transition-all shrink-0 flex items-center space-x-1';
+            } else {
+                filterBtn.className = 'px-3 py-1.5 rounded-lg text-xs font-bold border border-slate-300 bg-white text-slate-700 transition-all shrink-0 flex items-center space-x-1';
+            }
+        }
+
+        function toggleSelectedOnly() {
+            showSelectedOnly = !showSelectedOnly;
+            renderBillingList();
+        }
+
+        function clearBillItemSearch() {
+            document.getElementById('bill-item-search').value = '';
+            renderBillingList();
+        }
+
+        function saveCurrentBill() {
+            const summary = computeBillSummary();
+            if (summary.selectedCount === 0) {
+                showToast('⚠️ पहले कम से कम 1 सामान का वजन या पीस लिखें!');
+                return;
+            }
+
+            const rawName = (document.getElementById('customer-name').value || '').trim();
+            const now = new Date();
+            const timeStr = now.toLocaleTimeString('hi-IN', { hour: '2-digit', minute: '2-digit', hour12: true });
+            const dateStr = now.toLocaleDateString('hi-IN', { day: 'numeric', month: 'short' });
+
+            if (editingBillId) {
+                // Update existing saved bill
+                const idx = savedBills.findIndex(b => b.id === editingBillId);
+                if (idx !== -1) {
+                    const token = savedBills[idx].token;
+                    savedBills[idx] = {
+                        ...savedBills[idx],
+                        customerName: rawName || `ग्राहक #${token}`,
+                        items: summary.purchasedItems,
+                        totalAmount: summary.totalAmount,
+                        updatedAt: `${dateStr}, ${timeStr}`
+                    };
+                    showToast(`✅ बिल #${token} अपडेट हो गया!`);
+                }
+                editingBillId = null;
+            } else {
+                // Create new bill
+                const token = getNextTokenNumber();
+                const newBill = {
+                    id: 'bill_' + Date.now(),
+                    token: token,
+                    customerName: rawName || `ग्राहक #${token}`,
+                    items: summary.purchasedItems,
+                    totalAmount: summary.totalAmount,
+                    createdAt: `${dateStr}, ${timeStr}`
+                };
+                savedBills.unshift(newBill);
+                showToast(`✅ बिल #${token} (${newBill.customerName}) सेव हो गया!`);
+            }
+
+            // Reset current bill for next customer
+            currentBill = { customerName: '', entries: {} };
+            document.getElementById('customer-name').value = '';
+            showSelectedOnly = false;
+            updateEditingBadge();
+
+            saveBillsToStorage();
+            saveDraftToStorage();
+            renderAll();
+        }
+
+        function resetCurrentBill() {
+            currentBill = { customerName: '', entries: {} };
+            editingBillId = null;
+            showSelectedOnly = false;
+            document.getElementById('customer-name').value = '';
+            updateEditingBadge();
+            saveDraftToStorage();
+            renderBillingList();
+            showToast('🧹 बिल फॉर्म साफ़ कर दिया गया');
+        }
+
+        function updateEditingBadge() {
+            const badge = document.getElementById('editing-badge');
+            const saveBtnText = document.getElementById('save-bill-btn-text');
+            if (editingBillId) {
+                badge.classList.remove('hidden');
+                saveBtnText.textContent = 'बिल अपडेट करें';
+            } else {
+                badge.classList.add('hidden');
+                saveBtnText.textContent = 'बिल सेव करें';
+            }
+        }
+
+        function renderMasterItemsList() {
+            const container = document.getElementById('master-items-container');
+            let html = '';
+
+            masterItems.forEach((item) => {
+                const unitLabel = item.unit === 'pc' ? 'प्रति पीस' : (item.unit === 'kg' ? 'प्रति किलो (Kg)' : 'प्रति दर्जन (12 पीस)');
+                html += `
+                <div class="bg-white rounded-2xl p-3 border border-slate-200 shadow-xs flex items-center justify-between gap-2">
+                    <div class="flex-1 min-w-0">
+                        <h4 class="font-bold text-sm text-slate-900 truncate">${escapeHtml(item.name)}</h4>
+                        <span class="text-xs font-semibold text-slate-500">${unitLabel}</span>
+                    </div>
+
+                    <div class="flex items-center space-x-2 shrink-0">
+                        <div class="flex items-center bg-slate-50 border border-slate-300 rounded-xl px-2.5 py-1.5 focus-within:ring-2 focus-within:ring-orange-500">
+                            <span class="text-xs font-bold text-slate-500 mr-1">₹</span>
+                            <input type="number" inputmode="decimal" value="${item.rate}" 
+                                onchange="updateMasterItemRate('${item.id}', this.value)"
+                                class="w-16 text-sm font-extrabold text-slate-900 bg-transparent focus:outline-none text-right">
+                        </div>
+                        <button onclick="confirmDeleteMasterItem('${item.id}')" class="w-8 h-8 rounded-xl bg-red-50 hover:bg-red-100 text-red-600 flex items-center justify-center text-xs font-bold">
+                            🗑️
+                        </button>
+                    </div>
+                </div>`;
+            });
+
+            container.innerHTML = html;
+        }
+
+        function updateMasterItemRate(itemId, newRateVal) {
+            const parsed = parseFloat(newRateVal);
+            if (isNaN(parsed) || parsed < 0) return;
+            const item = masterItems.find(i => i.id === itemId);
+            if (item) {
+                item.rate = parsed;
+                saveItemsToStorage();
+                renderBillingList();
+                showToast(`✅ "${item.name}" का नया रेट ₹${parsed} सेव हो गया`);
+            }
+        }
+
+        function openAddItemModal() {
+            document.getElementById('new-item-name').value = '';
+            document.getElementById('new-item-rate').value = '';
+            document.getElementById('new-item-unit').value = 'pc';
+            document.getElementById('modal-add-item').classList.remove('hidden');
+            setTimeout(() => document.getElementById('new-item-name').focus(), 100);
+        }
+
+        function closeAddItemModal() {
+            document.getElementById('modal-add-item').classList.add('hidden');
+        }
+
+        function saveNewMasterItem() {
+            const name = (document.getElementById('new-item-name').value || '').trim();
+            const unit = document.getElementById('new-item-unit').value;
+            const rate = parseFloat(document.getElementById('new-item-rate').value);
+
+            if (!name) {
+                showToast('⚠️ कृपया सामान का नाम लिखें!');
+                return;
+            }
+            if (isNaN(rate) || rate <= 0) {
+                showToast('⚠️ कृपया सही रेट (Price) लिखें!');
+                return;
+            }
+
+            const newItem = {
+                id: 'item_' + Date.now(),
+                name,
+                unit,
+                rate
+            };
+
+            masterItems.unshift(newItem);
+            saveItemsToStorage();
+            closeAddItemModal();
+            renderAll();
+            showToast(`✅ "${name}" लिस्ट में जुड़ गया!`);
+        }
+
+        function confirmDeleteMasterItem(itemId) {
+            const item = masterItems.find(i => i.id === itemId);
+            if (!item) return;
+            openConfirmModal(
+                `"${item.name}" को लिस्ट से हटाएं?`,
+                'यह सामान आपके होम टैब से हट जाएगा।',
+                () => {
+                    masterItems = masterItems.filter(i => i.id !== itemId);
+                    delete currentBill.entries[itemId];
+                    saveItemsToStorage();
+                    saveDraftToStorage();
+                    renderAll();
+                    showToast('🗑️ सामान हटा दिया गया');
+                }
+            );
+        }
+
+        function openResetMasterModal() {
+            openConfirmModal(
+                'डिफ़ॉल्ट सामान लिस्ट रीसेट करें?',
+                'इससे सभी शुरुआती छठ पूजा सामान वापस आ जाएंगे।',
+                () => {
+                    masterItems = JSON.parse(JSON.stringify(DEFAULT_ITEMS));
+                    saveItemsToStorage();
+                    renderAll();
+                    showToast('✅ डिफ़ॉल्ट सामान लिस्ट रीसेट हो गई');
+                }
+            );
+        }
+
+        function renderHistoryList() {
+            const container = document.getElementById('history-bills-container');
+            const query = (document.getElementById('history-search').value || '').trim().toLowerCase();
+            const clearBtn = document.getElementById('clear-history-search-btn');
+            clearBtn.classList.toggle('hidden', query.length === 0);
+
+            updateHistoryBadge();
+
+            // Calculate total sales across all saved bills
+            const totalSales = savedBills.reduce((acc, b) => acc + (parseFloat(b.totalAmount) || 0), 0);
+            document.getElementById('history-total-bills').textContent = `${savedBills.length} बिल`;
+            document.getElementById('history-total-sales').textContent = `₹${formatMoney(totalSales)}`;
+
+            const filtered = savedBills.filter(bill => {
+                if (!query) return true;
+                const matchName = (bill.customerName || '').toLowerCase().includes(query);
+                const matchToken = `#${bill.token}`.includes(query) || String(bill.token) === query;
+                const matchAmount = String(bill.totalAmount).includes(query);
+                return matchName || matchToken || matchAmount;
+            });
+
+            if (filtered.length === 0) {
+                container.innerHTML = `
+                <div class="bg-white rounded-2xl p-8 text-center border border-dashed border-slate-300 space-y-2">
+                    <div class="text-3xl">📋</div>
+                    <p class="text-sm font-bold text-slate-700">${query ? 'इस नाम का कोई बिल नहीं मिला' : 'अभी तक कोई बिल सेव नहीं हुआ है'}</p>
+                    <p class="text-xs text-slate-500">नया बिल बनाकर "बिल सेव करें" दबाएं, वह यहाँ हमेशा सुरक्षित रहेगा।</p>
+                </div>`;
+                return;
+            }
+
+            let html = '';
+            filtered.forEach(bill => {
+                html += `
+                <div onclick="openSavedBillModal('${bill.id}')" class="bg-white hover:bg-orange-50/40 active:scale-[0.99] transition-all rounded-2xl p-3.5 border border-slate-200 shadow-xs cursor-pointer flex items-center justify-between gap-3">
+                    <div class="flex items-center space-x-3 min-w-0">
+                        <div class="w-11 h-11 rounded-2xl bg-orange-100 text-orange-800 font-extrabold text-sm flex items-center justify-center shrink-0">
+                            #${bill.token}
+                        </div>
+                        <div class="min-w-0">
+                            <h4 class="font-extrabold text-base text-slate-900 truncate">${escapeHtml(bill.customerName)}</h4>
+                            <p class="text-xs text-slate-500 font-medium">
+                                ${bill.items.length} सामान • ${bill.updatedAt ? 'अपडेट: ' + bill.updatedAt : bill.createdAt}
+                            </p>
+                        </div>
+                    </div>
+                    <div class="text-right shrink-0">
+                        <div class="text-xl font-extrabold text-emerald-700">₹${formatMoney(bill.totalAmount)}</div>
+                        <span class="text-[11px] font-bold text-orange-600 underline">पर्ची खोलें →</span>
+                    </div>
+                </div>`;
+            });
+
+            container.innerHTML = html;
+        }
+
+        function clearHistorySearch() {
+            document.getElementById('history-search').value = '';
+            renderHistoryList();
+        }
+
+        function updateHistoryBadge() {
+            document.getElementById('saved-bills-count').textContent = savedBills.length;
+        }
+
+        function openBillPreviewModal() {
+            const summary = computeBillSummary();
+            if (summary.selectedCount === 0) {
+                showToast('⚠️ पर्ची देखने के लिए पहले कुछ सामान चुनें');
+                return;
+            }
+            const name = (document.getElementById('customer-name').value || '').trim() || 'नया ग्राहक';
+            document.getElementById('modal-bill-token').textContent = 'अभी का बिल (Draft)';
+            document.getElementById('modal-bill-customer').textContent = name;
+            document.getElementById('modal-bill-time').textContent = 'अभी सेव नहीं किया गया है';
+            document.getElementById('modal-bill-total').textContent = formatMoney(summary.totalAmount);
+
+            renderModalItemsTable(summary.purchasedItems);
+
+            document.getElementById('modal-bill-actions').innerHTML = `
+                <button onclick="closeBillDetailsModal()" class="py-3 bg-slate-200 text-slate-800 font-bold rounded-xl text-sm">वापस जाएं</button>
+                <button onclick="closeBillDetailsModal(); saveCurrentBill();" class="py-3 bg-emerald-600 text-white font-extrabold rounded-xl text-sm shadow-md">✅ बिल सेव करें</button>
+            `;
+
+            document.getElementById('modal-bill-details').classList.remove('hidden');
+        }
+
+        function openSavedBillModal(billId) {
+            const bill = savedBills.find(b => b.id === billId);
+            if (!bill) return;
+
+            document.getElementById('modal-bill-token').textContent = `बिल #${bill.token}`;
+            document.getElementById('modal-bill-customer').textContent = bill.customerName;
+            document.getElementById('modal-bill-time').textContent = bill.createdAt;
+            document.getElementById('modal-bill-total').textContent = formatMoney(bill.totalAmount);
+
+            renderModalItemsTable(bill.items);
+
+            document.getElementById('modal-bill-actions').innerHTML = `
+                <button onclick="confirmDeleteSavedBill('${bill.id}')" class="py-3 bg-red-50 text-red-600 font-bold rounded-xl text-sm">🗑️ बिल मिटाएं</button>
+                <button onclick="loadBillForEditing('${bill.id}')" class="py-3 bg-orange-600 text-white font-extrabold rounded-xl text-sm shadow-md">✏️ सामान जोड़ें / बदलें</button>
+            `;
+
+            document.getElementById('modal-bill-details').classList.remove('hidden');
+        }
+
+        function renderModalItemsTable(items) {
+            const listEl = document.getElementById('modal-bill-items-list');
+            let html = '';
+            items.forEach((it, idx) => {
+                html += `
+                <div class="flex items-center justify-between py-2 border-b border-slate-100 text-sm">
+                    <div>
+                        <span class="font-bold text-slate-800">${idx + 1}. ${escapeHtml(it.name)}</span>
+                        <div class="text-xs text-slate-500 font-medium">${it.qtyLabel} (रेट: ₹${it.rate})</div>
+                    </div>
+                    <div class="font-extrabold text-slate-900">₹${formatMoney(it.lineTotal)}</div>
+                </div>`;
+            });
+            listEl.innerHTML = html;
+        }
+
+        function closeBillDetailsModal() {
+            document.getElementById('modal-bill-details').classList.add('hidden');
+        }
+
+        function loadBillForEditing(billId) {
+            const bill = savedBills.find(b => b.id === billId);
+            if (!bill) return;
+
+            editingBillId = bill.id;
+            currentBill = {
+                customerName: bill.customerName,
+                entries: {}
+            };
+
+            bill.items.forEach(savedItem => {
+                // Ensure item exists in master list, or restore it
+                const exists = masterItems.some(m => m.id === savedItem.id);
+                if (!exists) {
+                    masterItems.push({
+                        id: savedItem.id,
+                        name: savedItem.name,
+                        unit: savedItem.unit,
+                        rate: savedItem.rate
+                    });
+                }
+                currentBill.entries[savedItem.id] = {
+                    qty: savedItem.qty,
+                    subUnit: savedItem.subUnit || (savedItem.unit === 'dozen' ? 'pieces' : savedItem.unit)
+                };
+            });
+
+            document.getElementById('customer-name').value = bill.customerName;
+            updateEditingBadge();
+            saveDraftToStorage();
+            closeBillDetailsModal();
+            switchTab('bill');
+            showToast(`✏️ बिल #${bill.token} एडिट के लिए खुल गया`);
+        }
+
+        function confirmDeleteSavedBill(billId) {
+            const bill = savedBills.find(b => b.id === billId);
+            if (!bill) return;
+            closeBillDetailsModal();
+            openConfirmModal(
+                `बिल #${bill.token} (${bill.customerName}) मिटाएं?`,
+                `इस बिल की कुल रकम ₹${formatMoney(bill.totalAmount)} है।`,
+                () => {
+                    savedBills = savedBills.filter(b => b.id !== billId);
+                    if (editingBillId === billId) {
+                        resetCurrentBill();
+                    }
+                    saveBillsToStorage();
+                    renderHistoryList();
+                    showToast('🗑️ बिल मिटा दिया गया');
+                }
+            );
+        }
+
+        function switchTab(tabName) {
+            activeTab = tabName;
+
+            const tabs = ['bill', 'items', 'history'];
+            tabs.forEach(t => {
+                const sec = document.getElementById(`tab-${t}`);
+                const btn = document.getElementById(`tab-btn-${t}`);
+                if (t === tabName) {
+                    sec.classList.remove('hidden');
+                    btn.className = 'py-2.5 text-center font-bold text-sm border-b-4 border-white text-white transition-all flex items-center justify-center space-x-1';
+                } else {
+                    sec.classList.add('hidden');
+                    btn.className = 'py-2.5 text-center font-medium text-sm border-b-4 border-transparent text-orange-100 hover:text-white transition-all flex items-center justify-center space-x-1';
+                }
+            });
+
+            document.getElementById('sticky-bill-footer').classList.toggle('hidden', tabName !== 'bill');
+            document.getElementById('fab-add-item').classList.toggle('hidden', tabName !== 'items');
+
+            renderAll();
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+        }
+
+        function renderAll() {
+            renderBillingList();
+            renderMasterItemsList();
+            renderHistoryList();
+        }
+
+        function openConfirmModal(title, desc, onConfirm) {
+            document.getElementById('confirm-title').textContent = title;
+            document.getElementById('confirm-desc').textContent = desc;
+            const yesBtn = document.getElementById('confirm-yes-btn');
+            yesBtn.onclick = () => {
+                closeConfirmModal();
+                onConfirm();
+            };
+            document.getElementById('modal-confirm').classList.remove('hidden');
+        }
+
+        function closeConfirmModal() {
+            document.getElementById('modal-confirm').classList.add('hidden');
+        }
+
+        let toastTimeout = null;
+        function showToast(msg) {
+            const toast = document.getElementById('toast');
+            toast.textContent = msg;
+            toast.classList.remove('opacity-0');
+            toast.classList.add('opacity-100');
+            if (toastTimeout) clearTimeout(toastTimeout);
+            toastTimeout = setTimeout(() => {
+                toast.classList.remove('opacity-100');
+                toast.classList.add('opacity-0');
+            }, 2400);
+        }
+
+        function escapeHtml(str) {
+            return String(str)
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;')
+                .replace(/'/g, '&#039;');
+        }
+    </script>
+</body>
+</html>
